@@ -18,7 +18,11 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import org.springframework.data.mongodb.core.mapping.DBRef;
+import org.springframework.data.mongodb.core.mapping.Document;
+
 @Entity
+@Document(collection = "article_tags") // Added for MongoDB
 @Getter
 @SuppressWarnings("JpaDataSourceORMInspection")
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
@@ -34,10 +38,12 @@ public class ArticleTag {
     @Setter
     @ManyToOne
     @JoinColumn(name = "article_id")
+    @DBRef // Added for MongoDB
     private Article article;
 
     @ManyToOne
     @JoinColumn(name = "tag_name")
+    @DBRef // Added for MongoDB
     private Tag tag;
 
     @Column(nullable = false, updatable = false)

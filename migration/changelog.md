@@ -778,3 +778,118 @@ The `Article` entity is central and has multiple relationships. This initial ref
 - The full application test suite (`./gradlew clean test`) passes with the default "h2" profile active, ensuring no regressions to existing functionality.
 - Complex query translations using `MongoTemplate` for `findAll(ArticleFacets)` and operations involving not-yet-migrated related entities (ArticleTag, ArticleComment, ArticleFavorite) are explicitly marked as `TODO` and deferred.
 ---
+
+## 2025-06-11 - Task 2.4 Part A: Migrate ArticleTag and ArticleComment, Enhance Article Adapter
+
+**Related Task:** Phase 2, Task 2.4 Part A (Refactor remaining entities - ArticleTag and ArticleComment)
+
+**Reason for Change:**
+
+To migrate the `ArticleTag` and `ArticleComment` entities and their associated persistence layers to support MongoDB. This step also involves updating the `ArticleMongoRepositoryAdapter` to correctly handle these relationships, filling in the gaps left in Task 2.3. This is crucial for achieving full functionality for article tagging and commenting with MongoDB.
+
+**Summary of Changes:**
+
+*   **`ArticleTag` Migration:**
+    *   **Entity Annotation:** `module/core/src/main/java/io/zhc1/realworld/model/ArticleTag.java` was annotated with `@Document(collection = "article_tags")`. The `article` and `tag` fields were annotated with `@DBRef`.
+        ```diff
+        --- a/module/core/src/main/java/io/zhc1/realworld/model/ArticleTag.java
+        +++ b/module/core/src/main/java/io/zhc1/realworld/model/ArticleTag.java
+        @@ -18,7 +18,11 @@
+         import lombok.NoArgsConstructor;
+         import lombok.Setter;
+         
+        +import org.springframework.data.mongodb.core.mapping.DBRef;
+        +import org.springframework.data.mongodb.core.mapping.Document;
+        +
+         @Entity
+        +@Document(collection = "article_tags") // Added for MongoDB
+         @Getter
+         @SuppressWarnings("JpaDataSourceORMInspection")
+         @NoArgsConstructor(access = AccessLevel.PROTECTED)
+        @@ -34,10 +38,12 @@
+             @Setter
+             @ManyToOne
+             @JoinColumn(name = "article_id")
+        +    @DBRef // Added for MongoDB
+             private Article article;
+         
+             @ManyToOne
+             @JoinColumn(name = "tag_name")
+        +    @DBRef // Added for MongoDB
+             private Tag tag;
+         
+             @Column(nullable = false, updatable = false)
+        ```
+    *   **Mongo Repository:** Created `module/persistence/src/main/java/io/zhc1/realworld/persistence/ArticleTagMongoRepository.java` extending `MongoRepository<ArticleTag, Integer>` with methods like `findByArticle`, `findByTag`, `deleteByArticle`.
+        ```java
+        // Snippet from ArticleTagMongoRepository.java
+        interface ArticleTagMongoRepository extends MongoRepository<ArticleTag, Integer> {
+            List<ArticleTag> findByArticle(Article article);
+            List<ArticleTag> findByTag(Tag tag);
+            long deleteByArticle(Article article);
+            // ... other methods ...
+        }
+        ```
+    *   **JPA Adapter:** No dedicated JPA adapter existed for `ArticleTag` as it was managed via `Article` cascade.
+    *   **Mongo Adapter:** No dedicated adapter was created for `ArticleTag` as its operations are primarily driven through `ArticleMongoRepositoryAdapter`.
+
+*   **`ArticleComment` Migration:**
+    *   **Entity Annotation:** `module/core/src/main/java/io/zhc1/realworld/model/ArticleComment.java` was annotated with `@Document(collection = "article_comments")`. The `article` and `author` fields were annotated with `@DBRef`.
+        ```diff
+        --- a/module/core/src/main/java/io/zhc1/realworld/model/ArticleComment.java
+        +++ b/module/core/src/main/java/io/zhc1/realworld/model/ArticleComment.java
+        @@ -16,7 +16,11 @@
+         import lombok.NoArgsConstructor;
+         import lombok.Setter;
+         
+        +import org.springframework.data.mongodb.core.mapping.DBRef;
+        +import org.springframework.data.mongodb.core.mapping.Document;
+        +
+         @Entity
+        +@Document(collection = "article_comments") // Added for MongoDB
+         @Getter
+         @Setter
+         @NoArgsConstructor(access = AccessLevel.PROTECTED)
+        @@ -27,10 +31,12 @@
+         
+             @ManyToOne
+             @JoinColumn(name = "article_id", nullable = false)
+        +    @DBRef // Added for MongoDB
+             private Article article;
+         
+             @ManyToOne
+             @JoinColumn(name = "author_id", nullable = false)
+        +    @DBRef // Added for MongoDB
+             private User author;
+         
+             @Column(length = 500, nullable = false)
+        ```
+    *   **Mongo Repository:** Created `module/persistence/src/main/java/io/zhc1/realworld/persistence/ArticleCommentMongoRepository.java` extending `MongoRepository<ArticleComment, Integer>` with methods `findByArticleOrderByCreatedAtDesc` and `deleteByArticle`.
+    *   **JPA Adapter Isolation:** `ArticleCommentRepositoryAdapter.java` was renamed to `ArticleCommentJpaRepositoryAdapter.java` and profiled with `@Profile("h2")`.
+    *   **Mongo Adapter:** Created `module/persistence/src/main/java/io/zhc1/realworld/persistence/ArticleCommentMongoRepositoryAdapter.java` profiled with `@Profile("mongodb")`, implementing `ArticleCommentRepository` and using `ArticleCommentMongoRepository`.
+
+*   **Enhancements to `ArticleMongoRepositoryAdapter`:**
+    *   File: `module/persistence/src/main/java/io/zhc1/realworld/persistence/ArticleMongoRepositoryAdapter.java`
+    *   **Tag Handling:**
+        *   The `save(Article article, Collection<Tag> tags)` method was updated to clear existing `ArticleTag` associations for the article, then create and persist new `ArticleTag` documents for each input tag, linking them to the article and the (upserted) tag. The article's `articleTags` collection is updated with these new `@DBRef`s.
+        *   The `findAll(ArticleFacets facets)` method's `tag` facet was implemented to query articles based on tag name by finding associated `ArticleTag` documents.
+        *   The `delete(Article article)` method was updated to delete all `ArticleTag` documents associated with the article.
+    *   **Comment Handling:**
+        *   The `delete(Article article)` method was updated to use `ArticleCommentMongoRepository.deleteByArticle(article)` to remove comments associated with the deleted article.
+
+**Note on Remaining Entities:**
+This part (Part A) completes the `ArticleTag` and `ArticleComment` migrations and fills the most critical gaps in the `Article` entity's MongoDB functionality. The `ArticleFavorite` and `UserFollow` entities, along with any remaining `TODOs` in `ArticleMongoRepositoryAdapter` related to favorites, will be addressed in Task 2.4 Part B.
+
+**Success Criteria:**
+
+- `ArticleTag.java` and `ArticleComment.java` entities are correctly annotated for MongoDB with `@Document` and `@DBRef`.
+- `ArticleTagMongoRepository.java` and `ArticleCommentMongoRepository.java` interfaces are created with necessary methods.
+- `ArticleCommentJpaRepositoryAdapter.java` is correctly renamed and profiled.
+- `ArticleCommentMongoRepositoryAdapter.java` is created and correctly implements `ArticleCommentRepository` for MongoDB.
+- `ArticleMongoRepositoryAdapter.java` is updated to:
+    - Correctly save and link `ArticleTag` documents when an article is saved with tags.
+    - Implement the `tag` facet using `ArticleTagMongoRepository`.
+    - Delete associated `ArticleTag` and `ArticleComment` documents when an article is deleted.
+- The changelog is updated with this entry.
+- The full application test suite (`./gradlew clean test`) passes with the default "h2" profile active, ensuring no regressions.
+---

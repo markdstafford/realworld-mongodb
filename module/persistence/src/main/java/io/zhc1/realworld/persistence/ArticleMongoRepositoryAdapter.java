@@ -2,11 +2,10 @@ package io.zhc1.realworld.persistence;
 
 import java.util.ArrayList;
 import java.util.Collection;
-// import java.util.HashSet; // Not strictly needed for the simplified version
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
-// import java.util.Set; // Not strictly needed for the simplified version
-// import java.util.stream.Collectors; // Not strictly needed for the simplified version
+import java.util.stream.Collectors;
 
 import org.springframework.context.annotation.Profile;
 import org.springframework.data.domain.PageRequest;
@@ -24,7 +23,7 @@ import io.zhc1.realworld.model.ArticleDetails;
 import io.zhc1.realworld.model.ArticleFacets;
 // import io.zhc1.realworld.model.ArticleFavorite; // Removed dependency
 import io.zhc1.realworld.model.ArticleRepository;
-// import io.zhc1.realworld.model.ArticleTag; // Removed direct usage of ArticleTag instances for linking
+import io.zhc1.realworld.model.ArticleTag;
 import io.zhc1.realworld.model.Tag;
 import io.zhc1.realworld.model.User;
 import io.zhc1.realworld.model.UserRepository;
@@ -36,8 +35,8 @@ class ArticleMongoRepositoryAdapter implements ArticleRepository {
 
     private final ArticleMongoRepository articleMongoRepository;
     private final TagMongoRepository tagMongoRepository;
-    // private final ArticleTagMongoRepository articleTagMongoRepository; // Removed
-    // private final ArticleCommentMongoRepository articleCommentMongoRepository; // Removed
+    private final ArticleTagMongoRepository articleTagMongoRepository; // Added dependency
+    private final ArticleCommentMongoRepository articleCommentMongoRepository; // Uncommented and added to constructor
     // private final ArticleFavoriteMongoRepository articleFavoriteMongoRepository; // Removed
     private final UserRepository userRepository; // Used to find user for 'author' facet
     private final MongoTemplate mongoTemplate;
@@ -55,30 +54,30 @@ class ArticleMongoRepositoryAdapter implements ArticleRepository {
     @Transactional
     public Article save(Article article, Collection<Tag> tags) {
         // 1. Save the article's core properties.
-        // If it's an update, existing article.getArticleTags() DBRefs will be preserved.
         Article savedArticle = articleMongoRepository.save(article);
 
-        // 2. Ensure all provided Tag documents exist in the 'tags' collection.
+        // 2. Clear existing tag associations for this article
+        List<ArticleTag> oldArticleTags = articleTagMongoRepository.findByArticle(savedArticle);
+        if (!oldArticleTags.isEmpty()) {
+            articleTagMongoRepository.deleteAll(oldArticleTags);
+        }
+        savedArticle.getArticleTags().clear(); // Clear the collection on the entity
+
+        // 3. Create and persist new ArticleTag associations
         if (tags != null) {
-            for (Tag tag : tags) {
-                tagMongoRepository.save(tag); // Upserts tag by its name (ID)
+            for (Tag tagInput : tags) {
+                Tag persistedTag = tagMongoRepository.save(tagInput); // Upserts tag by its name (ID)
+                ArticleTag newArticleTag = new ArticleTag(savedArticle, persistedTag);
+                ArticleTag persistedArticleTag = articleTagMongoRepository.save(newArticleTag);
+                // The Article.addTag method internally adds to the Set and sets the back-reference.
+                // However, since we are managing DBRefs, we add the persisted ArticleTag
+                // which now has its own ID and correct DBRefs to Article and Tag.
+                savedArticle.getArticleTags().add(persistedArticleTag);
             }
         }
 
-        // TODO: Implement ArticleTag creation and persistence when ArticleTagMongoRepository is available.
-        // This involves:
-        //   a. For each Tag in the input 'tags':
-        //      i. Create a new ArticleTag document.
-        //      ii. Set its @DBRef to the persisted Tag.
-        //      iii. Set its @DBRef to the savedArticle.
-        //      iv. Save the ArticleTag document using ArticleTagMongoRepository.
-        //   b. Clear savedArticle.getArticleTags() (if current behavior is to replace all tags).
-        //   c. Add DBRefs of the newly saved ArticleTag documents to savedArticle.getArticleTags().
-        //   d. Save 'savedArticle' again to update its list of @DBRef to ArticleTags.
-        // For now, the article.getArticleTags() collection is NOT updated with new tags here.
-        // New tags are persisted in the 'tags' collection, but not linked to the article.
-
-        return savedArticle;
+        // 4. Save the article again to update its list of @DBRef to ArticleTags.
+        return articleMongoRepository.save(savedArticle);
     }
 
     @Override
@@ -90,24 +89,40 @@ class ArticleMongoRepositoryAdapter implements ArticleRepository {
         if (facets.author() != null && !facets.author().isBlank()) {
             Optional<User> authorOpt = userRepository.findByUsername(facets.author());
             if (authorOpt.isPresent()) {
-                // Query for articles where the 'author' field (DBRef) matches the found User's ID.
+                // Query for articles where the 'author' field (DBRef) matches the found User.
                 // Spring Data MongoDB automatically handles DBRef resolution for direct fields.
                 orCriteriaList.add(Criteria.where("author").is(authorOpt.get()));
             } else {
                 // Author not found, this facet should result in no articles for the OR condition.
-                // Add a criteria that will never match.
-                orCriteriaList.add(Criteria.where("id").is(Integer.MIN_VALUE)); // Assuming ID is Integer
+                orCriteriaList.add(Criteria.where("id").is(Integer.MIN_VALUE)); 
             }
         }
 
         if (facets.tag() != null && !facets.tag().isBlank()) {
-            // TODO: Implement tag-based filtering once ArticleTag persistence and linking are complete.
-            // This would involve querying articles whose 'articleTags' array contains a DBRef
-            // to an ArticleTag document, which in turn contains a DBRef to a Tag document
-            // with the name facets.tag().
-            // Example conceptual query: Criteria.where("articleTags.tag.name").is(facets.tag())
-            // For now, this facet is ignored to ensure compilation and basic functionality.
-            System.err.println("TODO: Tag facet in ArticleMongoRepositoryAdapter.findAll is not yet implemented for MongoDB.");
+            Optional<Tag> tagOpt = tagMongoRepository.findById(facets.tag()); // Tag name is the ID
+            if (tagOpt.isPresent()) {
+                Tag persistedTag = tagOpt.get();
+                List<ArticleTag> articleTagsWithGivenTag = articleTagMongoRepository.findByTag(persistedTag);
+                if (!articleTagsWithGivenTag.isEmpty()) {
+                    List<Integer> articleIds = articleTagsWithGivenTag.stream()
+                            .map(at -> at.getArticle() != null ? at.getArticle().getId() : null)
+                            .filter(Objects::nonNull)
+                            .distinct()
+                            .collect(Collectors.toList());
+                    if (!articleIds.isEmpty()) {
+                        orCriteriaList.add(Criteria.where("id").in(articleIds));
+                    } else {
+                        // Tag exists, but no articles are associated with it via ArticleTag
+                         orCriteriaList.add(Criteria.where("id").is(Integer.MIN_VALUE));
+                    }
+                } else {
+                    // Tag exists, but no ArticleTag documents link to it
+                    orCriteriaList.add(Criteria.where("id").is(Integer.MIN_VALUE));
+                }
+            } else {
+                // Tag itself doesn't exist
+                orCriteriaList.add(Criteria.where("id").is(Integer.MIN_VALUE));
+            }
         }
 
         if (facets.favorited() != null && !facets.favorited().isBlank()) {
@@ -164,19 +179,15 @@ class ArticleMongoRepositoryAdapter implements ArticleRepository {
     @Override
     @Transactional
     public void delete(Article article) {
-        // TODO: Delete related ArticleComments using ArticleCommentMongoRepository when available.
-        // Example: articleCommentMongoRepository.deleteByArticle(article);
-        System.err.println("TODO: Deletion of related ArticleComments is not yet implemented for MongoDB.");
+        // Delete related ArticleTag associations
+        articleTagMongoRepository.deleteByArticle(article);
+
+        // Delete related ArticleComments
+        articleCommentMongoRepository.deleteByArticle(article);
 
         // TODO: Delete related ArticleFavorites using ArticleFavoriteMongoRepository when available.
         // Example: articleFavoriteMongoRepository.deleteByArticle(article);
         System.err.println("TODO: Deletion of related ArticleFavorites is not yet implemented for MongoDB.");
-
-        // TODO: Delete related ArticleTag documents using ArticleTagMongoRepository when available.
-        // This would involve:
-        //   1. Finding all ArticleTag documents that reference this article.
-        //   2. Deleting those ArticleTag documents.
-        System.err.println("TODO: Deletion of related ArticleTags is not yet implemented for MongoDB.");
         
         articleMongoRepository.delete(article);
     }

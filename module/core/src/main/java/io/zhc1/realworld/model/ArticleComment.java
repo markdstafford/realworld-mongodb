@@ -16,7 +16,11 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import org.springframework.data.mongodb.core.mapping.DBRef;
+import org.springframework.data.mongodb.core.mapping.Document;
+
 @Entity
+@Document(collection = "article_comments") // Added for MongoDB
 @Getter
 @Setter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
@@ -27,10 +31,12 @@ public class ArticleComment {
 
     @ManyToOne
     @JoinColumn(name = "article_id", nullable = false)
+    @DBRef // Added for MongoDB
     private Article article;
 
     @ManyToOne
     @JoinColumn(name = "author_id", nullable = false)
+    @DBRef // Added for MongoDB
     private User author;
 
     @Column(length = 500, nullable = false)
