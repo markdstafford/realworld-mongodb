@@ -12,7 +12,10 @@ import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
+import org.springframework.data.mongodb.core.mapping.Document;
+
 @Entity
+@Document(collection = "tags") // Added for MongoDB
 @Getter
 @Table(name = "tag")
 @SuppressWarnings("JpaDataSourceORMInspection")

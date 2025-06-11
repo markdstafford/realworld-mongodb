@@ -561,3 +561,125 @@ To migrate the `User` entity and its associated persistence layer components (re
 - The changelog is updated with this entry, including details of the fixes.
 - The full application test suite (`./gradlew clean test`) passes with the default "h2" profile active, confirming no regressions and that the application context loads correctly.
 ---
+
+## 2025-06-11 - Task 2.2: Refactor Tag persistence
+
+**Related Task:** Phase 2, Task 2.2 (Refactor Tag persistence)
+
+**Reason for Change:**
+
+To migrate the `Tag` entity and its associated persistence layer components (repository interface, repository adapter) from JPA/H2 to Spring Data MongoDB. This follows the established pattern from the `User` entity migration (Task 2.1). The `Tag` entity is simpler than `User`, primarily involving a `findAll` operation and using a `String` as its ID, which streamlined this part of the migration. No new unit tests were required for this specific adapter as per the migration task list, unlike the `User` adapter.
+
+**Summary of Changes:**
+
+*   **Annotate `Tag` entity for MongoDB:**
+    *   File: `module/core/src/main/java/io/zhc1/realworld/model/Tag.java`
+    *   Change: Added `@org.springframework.data.mongodb.core.mapping.Document(collection = "tags")` annotation to the `Tag` class. Existing JPA annotations (`@Entity`, `@Table`, `@Id`) are retained for H2 compatibility.
+    *   Diff:
+        ```diff
+        --- a/module/core/src/main/java/io/zhc1/realworld/model/Tag.java
+        +++ b/module/core/src/main/java/io/zhc1/realworld/model/Tag.java
+        @@ -12,7 +12,10 @@
+         import lombok.Getter;
+         import lombok.NoArgsConstructor;
+         
+        +import org.springframework.data.mongodb.core.mapping.Document;
+        +
+         @Entity
+        +@Document(collection = "tags") // Added for MongoDB
+         @Getter
+         @Table(name = "tag")
+         @SuppressWarnings("JpaDataSourceORMInspection")
+        ```
+
+*   **Create `TagMongoRepository` interface:**
+    *   New File: `module/persistence/src/main/java/io/zhc1/realworld/persistence/TagMongoRepository.java`
+    *   Content: Interface extending `org.springframework.data.mongodb.repository.MongoRepository<Tag, String>`. No custom methods were needed, similar to `TagJpaRepository`.
+    *   Code:
+        ```java
+        package io.zhc1.realworld.persistence;
+        
+        import org.springframework.data.mongodb.repository.MongoRepository;
+        
+        import io.zhc1.realworld.model.Tag;
+        
+        interface TagMongoRepository extends MongoRepository<Tag, String> {
+            // No custom methods needed, similar to TagJpaRepository
+        }
+        ```
+
+*   **Isolate existing JPA Adapter (`TagRepositoryAdapter`):**
+    *   File Renamed: `module/persistence/src/main/java/io/zhc1/realworld/persistence/TagRepositoryAdapter.java` to `TagJpaRepositoryAdapter.java`.
+    *   Class Name Change: The class name within the file was updated from `TagRepositoryAdapter` to `TagJpaRepositoryAdapter`.
+    *   Annotation Added: `@org.springframework.context.annotation.Profile("h2")` was added to the `TagJpaRepositoryAdapter` class.
+    *   Diff (Illustrative - actual change includes class rename and import):
+        ```diff
+        --- a/module/persistence/src/main/java/io/zhc1/realworld/persistence/TagJpaRepositoryAdapter.java
+        +++ b/module/persistence/src/main/java/io/zhc1/realworld/persistence/TagJpaRepositoryAdapter.java
+        @@ -3,6 +3,7 @@
+         import java.util.List;
+         
+         import org.springframework.cache.annotation.Cacheable;
+        +import org.springframework.context.annotation.Profile; // Added import
+         import org.springframework.stereotype.Repository;
+         
+         import lombok.RequiredArgsConstructor;
+        @@ -12,9 +13,10 @@
+         import io.zhc1.realworld.model.Tag;
+         import io.zhc1.realworld.model.TagRepository;
+         
+        +@Profile("h2") // Added annotation
+         @Repository
+         @RequiredArgsConstructor
+        -class TagRepositoryAdapter implements TagRepository {
+        +class TagJpaRepositoryAdapter implements TagRepository { // Changed class name
+             private final TagJpaRepository tagJpaRepository;
+         
+             @Override
+        ```
+
+*   **Create `TagMongoRepositoryAdapter` for MongoDB:**
+    *   New File: `module/persistence/src/main/java/io/zhc1/realworld/persistence/TagMongoRepositoryAdapter.java`
+    *   Content: A new class implementing `io.zhc1.realworld.model.TagRepository`.
+        *   Annotated with `@org.springframework.stereotype.Component("tagMongoRepositoryAdapter")` (explicit bean name) and `@org.springframework.context.annotation.Profile("mongodb")`.
+        *   Injects and uses the `TagMongoRepository`. The `@Cacheable(value = CacheName.ALL_TAGS)` annotation is retained on the `findAll()` method for consistency.
+    *   Code:
+        ```java
+        package io.zhc1.realworld.persistence;
+        
+        import java.util.List;
+        
+        import org.springframework.cache.annotation.Cacheable;
+        import org.springframework.context.annotation.Profile;
+        import org.springframework.stereotype.Component;
+        
+        import lombok.RequiredArgsConstructor;
+        
+        import io.zhc1.realworld.config.CacheName;
+        import io.zhc1.realworld.model.Tag;
+        import io.zhc1.realworld.model.TagRepository;
+        
+        @Profile("mongodb")
+        @Component("tagMongoRepositoryAdapter") // Explicit bean name to avoid conflicts
+        @RequiredArgsConstructor
+        class TagMongoRepositoryAdapter implements TagRepository {
+        
+            private final TagMongoRepository tagMongoRepository;
+        
+            @Override
+            @Cacheable(value = CacheName.ALL_TAGS)
+            public List<Tag> findAll() {
+                return tagMongoRepository.findAll();
+            }
+        }
+        ```
+
+**Success Criteria:**
+
+- The `Tag.java` entity in `module/core` is correctly annotated with `@Document(collection = "tags")` alongside existing JPA annotations.
+- The `TagMongoRepository.java` interface is created in `module/persistence`, extends `MongoRepository<Tag, String>`.
+- The `TagJpaRepositoryAdapter.java` (formerly `TagRepositoryAdapter.java`) in `module/persistence` is correctly renamed (file and class), annotated with `@Profile("h2")`, and continues to implement `TagRepository` using `TagJpaRepository`.
+- The new `TagMongoRepositoryAdapter.java` is created in `module/persistence`, implements `TagRepository`, is annotated with `@Component("tagMongoRepositoryAdapter")` and `@Profile("mongodb")`, and correctly uses `TagMongoRepository`.
+- The changelog is updated with this entry.
+- The full application test suite (`./gradlew clean test`) passes with the default "h2" profile active, ensuring that these changes (including the new, currently inactive MongoDB components and the modified Tag entity) have not introduced regressions to the existing H2 functionality.
+---
