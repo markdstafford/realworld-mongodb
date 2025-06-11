@@ -43,3 +43,66 @@ The fix involved removing this incompatible line from `schema.sql`.
 - All 15 unit tests passed.
 - A stable project baseline with a correctly functioning H2 database setup was established, allowing the migration to proceed.
 ---
+
+## 2025-06-11 - Task 0.3: Update project dependencies (Conservative)
+
+**Related Task:** Phase 0, Task 0.3 (Update project dependencies)
+
+**Reason for Change:**
+
+As per the migration plan and user instruction, project dependencies were updated to their latest stable *patch* versions. This conservative approach aims to incorporate bug fixes and minor improvements without risking breaking changes that major or minor version bumps might introduce. The `dependencyUpdates` Gradle task was not available (missing `com.github.ben-manes.versions` plugin), so versions were checked and updated manually in `gradle/libs.versions.toml`.
+
+Updated dependencies include:
+- Spring Boot (core framework)
+- Spring Dependency Management (Gradle plugin)
+- P6Spy Spring Boot Starter (SQL logging)
+
+The Spotless Gradle plugin version (`spotless`) was initially attempted to be updated from `7.0.3` to `7.0.5`. However, `7.0.5` was not found in plugin repositories. Version `7.0.3` was confirmed to be the latest available patch in its series at the time of update and thus remained unchanged.
+
+**Code Diff (`gradle/libs.versions.toml`):**
+
+```diff
+--- a/gradle/libs.versions.toml
++++ b/gradle/libs.versions.toml
+@@ -1,10 +1,10 @@
+ [versions]
+ java = "21"
+ spotless = "7.0.3"
+ 
+-spring-boot = "3.3.0"
+-spring-dependency-management = "1.1.5"
+-spring-boot-p6spy = "1.9.0"
++spring-boot = "3.3.6"
++spring-dependency-management = "1.1.6"
++spring-boot-p6spy = "1.9.1"
+ 
+ [libraries]
+ lombok = { group = "org.projectlombok", name = "lombok" }
+
+```
+
+**Success Criteria:**
+
+- The `gradle/libs.versions.toml` file is updated with the new patch versions for the specified dependencies (Spring Boot, Spring Dependency Management, P6Spy). Spotless version remains `7.0.3`.
+- The next step (Task 0.4) will be to validate these changes by running the full test suite.
+---
+
+## 2025-06-11 - Task 0.4: Validate dependency updates
+
+**Related Task:** Phase 0, Task 0.4 (Validate dependency updates)
+
+**Reason for Change:**
+
+To ensure that the conservative dependency updates made in Task 0.3 did not introduce any regressions or compatibility issues into the project.
+
+**Process:**
+
+1.  The `gradle/libs.versions.toml` file was updated with conservative patch versions for Spring Boot (to `3.3.6`), Spring Dependency Management (to `1.1.6`), and P6Spy Spring Boot Starter (to `1.9.1`). The Spotless version remained at `7.0.3` as it was already the latest in its patch series.
+2.  The full unit test suite was executed using the command: `./gradlew clean test`.
+
+**Success Criteria:**
+
+- The project compiled successfully with the updated dependencies.
+- All 15 unit tests passed after the dependency updates.
+- **Phase 0: Project baseline and health check is now complete.** The project has a stable baseline, a documented and validated testing protocol, and updated dependencies (conservatively), with all tests passing.
+---
