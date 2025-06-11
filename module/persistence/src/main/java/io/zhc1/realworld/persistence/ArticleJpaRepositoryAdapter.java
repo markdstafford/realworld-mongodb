@@ -4,6 +4,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
+import org.springframework.context.annotation.Profile; // Added import
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Repository;
@@ -19,9 +20,10 @@ import io.zhc1.realworld.model.ArticleTag;
 import io.zhc1.realworld.model.Tag;
 import io.zhc1.realworld.model.User;
 
+@Profile("h2") // Added annotation
 @Repository
 @RequiredArgsConstructor
-class ArticleRepositoryAdapter implements ArticleRepository {
+class ArticleJpaRepositoryAdapter implements ArticleRepository { // Changed class name
     private final TagJpaRepository tagJpaRepository;
     private final ArticleJpaRepository articleJpaRepository;
     private final ArticleCommentJpaRepository articleCommentJpaRepository;

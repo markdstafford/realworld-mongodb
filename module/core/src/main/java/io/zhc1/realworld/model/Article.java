@@ -20,7 +20,11 @@ import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
+import org.springframework.data.mongodb.core.mapping.DBRef;
+import org.springframework.data.mongodb.core.mapping.Document;
+
 @Entity
+@Document(collection = "articles") // Added for MongoDB
 @Getter
 @SuppressWarnings("JpaDataSourceORMInspection")
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
@@ -32,6 +36,7 @@ public class Article {
 
     @ManyToOne
     @JoinColumn(name = "author_id", nullable = false)
+    @DBRef // Added for MongoDB
     private User author;
 
     @Column(length = 50, unique = true, nullable = false)
@@ -47,6 +52,7 @@ public class Article {
     private String content;
 
     @OneToMany(mappedBy = "article", cascade = CascadeType.ALL, fetch = FetchType.EAGER)
+    @DBRef // Added for MongoDB, implies ArticleTag will be a separate document collection
     private final Set<ArticleTag> articleTags = new HashSet<>();
 
     @Column(nullable = false, updatable = false)

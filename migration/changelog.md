@@ -683,3 +683,98 @@ To migrate the `Tag` entity and its associated persistence layer components (rep
 - The changelog is updated with this entry.
 - The full application test suite (`./gradlew clean test`) passes with the default "h2" profile active, ensuring that these changes (including the new, currently inactive MongoDB components and the modified Tag entity) have not introduced regressions to the existing H2 functionality.
 ---
+
+## 2025-06-11 - Task 2.3: Refactor Article persistence (Partial)
+
+**Related Task:** Phase 2, Task 2.3 (Refactor Article persistence)
+
+**Reason for Change:**
+
+To migrate the `Article` entity and its core persistence layer components to support MongoDB. This is a complex entity due to its multiple relationships (User, Tag, ArticleComment, ArticleFavorite) and reliance on `JpaSpecificationExecutor` for dynamic queries. This task focuses on annotating the `Article` entity, creating the basic MongoDB repository and adapter structures, and deferring the full implementation of complex query logic and related entity operations (like saving tags or handling favorites/comments) to subsequent tasks or when those entities are migrated.
+
+**Summary of Changes:**
+
+*   **Annotate `Article` entity for MongoDB:**
+    *   File: `module/core/src/main/java/io/zhc1/realworld/model/Article.java`
+    *   Change: Added `@org.springframework.data.mongodb.core.mapping.Document(collection = "articles")`. Added `@org.springframework.data.mongodb.core.mapping.DBRef` to the `author` (User) and `articleTags` (Set<ArticleTag>) fields to indicate these will be references to documents in other collections.
+    *   Diff:
+        ```diff
+        --- a/module/core/src/main/java/io/zhc1/realworld/model/Article.java
+        +++ b/module/core/src/main/java/io/zhc1/realworld/model/Article.java
+        @@ -20,7 +20,11 @@
+         import lombok.Getter;
+         import lombok.NoArgsConstructor;
+         
+        +import org.springframework.data.mongodb.core.mapping.DBRef;
+        +import org.springframework.data.mongodb.core.mapping.Document;
+        +
+         @Entity
+        +@Document(collection = "articles") // Added for MongoDB
+         @Getter
+         @SuppressWarnings("JpaDataSourceORMInspection")
+         @NoArgsConstructor(access = AccessLevel.PROTECTED)
+        @@ -32,6 +36,7 @@
+         
+             @ManyToOne
+             @JoinColumn(name = "author_id", nullable = false)
+        +    @DBRef // Added for MongoDB
+             private User author;
+         
+             @Column(length = 50, unique = true, nullable = false)
+        @@ -47,6 +52,7 @@
+             private String content;
+         
+             @OneToMany(mappedBy = "article", cascade = CascadeType.ALL, fetch = FetchType.EAGER)
+        +    @DBRef // Added for MongoDB, implies ArticleTag will be a separate document collection
+             private final Set<ArticleTag> articleTags = new HashSet<>();
+         
+             @Column(nullable = false, updatable = false)
+        ```
+
+*   **Create `ArticleMongoRepository` interface:**
+    *   New File: `module/persistence/src/main/java/io/zhc1/realworld/persistence/ArticleMongoRepository.java`
+    *   Content: Interface extending `org.springframework.data.mongodb.repository.MongoRepository<Article, Integer>`. Includes derived queries for `findBySlug`, `findByAuthorInOrderByCreatedAtDesc`, `existsByTitle`, `findByArticleTagsTagName`, `findByAuthorUsername`, and `findAllByOrderByCreatedAtDesc`. Notes that more complex queries (previously `JpaSpecificationExecutor`) will be handled in the adapter using `MongoTemplate`.
+    *   Code:
+        ```java
+        package io.zhc1.realworld.persistence;
+        // ... imports ...
+        interface ArticleMongoRepository extends MongoRepository<Article, Integer> {
+            Optional<Article> findBySlug(String slug);
+            Page<Article> findByAuthorInOrderByCreatedAtDesc(Collection<User> authors, Pageable pageable);
+            boolean existsByTitle(String title);
+            Page<Article> findByArticleTagsTagName(String tagName, Pageable pageable);
+            Page<Article> findByAuthorUsername(String username, Pageable pageable);
+            Page<Article> findAllByOrderByCreatedAtDesc(Pageable pageable);
+            // Note: More complex queries ... will be implemented in ... ArticleMongoRepositoryAdapter ...
+        }
+        ```
+
+*   **Isolate existing JPA Adapter (`ArticleRepositoryAdapter`):**
+    *   File Renamed: `module/persistence/src/main/java/io/zhc1/realworld/persistence/ArticleRepositoryAdapter.java` to `ArticleJpaRepositoryAdapter.java`.
+    *   Class Name Change: Updated from `ArticleRepositoryAdapter` to `ArticleJpaRepositoryAdapter`.
+    *   Annotation Added: `@org.springframework.context.annotation.Profile("h2")`.
+
+*   **Create `ArticleMongoRepositoryAdapter` for MongoDB (Partial Implementation):**
+    *   New File: `module/persistence/src/main/java/io/zhc1/realworld/persistence/ArticleMongoRepositoryAdapter.java`
+    *   Content: Implements `ArticleRepository`. Annotated with `@Component("articleMongoRepositoryAdapter")` and `@Profile("mongodb")`.
+        *   Injects `ArticleMongoRepository`, `TagMongoRepository`, `UserRepository`, and `MongoTemplate`.
+        *   `save(Article article)`: Basic save operation.
+        *   `save(Article article, Collection<Tag> tags)`: Saves the article and ensures tags exist. Linking `ArticleTag` documents is marked as `TODO` as it depends on `ArticleTagMongoRepository`.
+        *   `findAll(ArticleFacets facets)`: Uses `MongoTemplate` and `Criteria` API for querying. Author facet is implemented. Tag and Favorited facets are marked as `TODO` as they depend on `ArticleTag` and `ArticleFavorite` persistence respectively.
+        *   `findBySlug`, `findByAuthors`, `existsBy`: Delegate to `ArticleMongoRepository`.
+        *   `findArticleDetails`: Placeholder implementation returning 0 for `totalFavorites` and `false` for `favorited`, with `TODO` comments for full implementation pending `ArticleFavoriteMongoRepository`. Corrected `long` to `int` type for `totalFavorites` parameter in `ArticleDetails` constructor calls.
+        *   `delete(Article article)`: Deletes the article. Deletion of related `ArticleComment`, `ArticleFavorite`, and `ArticleTag` documents is marked as `TODO`.
+
+**Note on Complexity and Approach:**
+The `Article` entity is central and has multiple relationships. This initial refactoring for Task 2.3 focuses on setting up the `Article` entity itself for MongoDB and its direct repository/adapter. The full logic for handling its relationships (tags, comments, favorites) and complex dynamic queries (especially those involving these related entities) is deferred. This phased approach within the entity's migration allows for incremental progress and testing.
+
+**Success Criteria:**
+
+- The `Article.java` entity in `module/core` is correctly annotated with `@Document` and relevant fields with `@DBRef`.
+- The `ArticleMongoRepository.java` interface is created in `module/persistence` with basic derived query methods.
+- The `ArticleJpaRepositoryAdapter.java` in `module/persistence` is correctly renamed, profiled, and implements `ArticleRepository` using JPA.
+- The new `ArticleMongoRepositoryAdapter.java` is created in `module/persistence`, implements `ArticleRepository`, is profiled for MongoDB, and contains the initial structure for MongoDB operations, including `MongoTemplate` usage for `findAll(ArticleFacets)` and `TODO` markers for deferred logic.
+- The changelog is updated with this entry.
+- The full application test suite (`./gradlew clean test`) passes with the default "h2" profile active, ensuring no regressions to existing functionality.
+- Complex query translations using `MongoTemplate` for `findAll(ArticleFacets)` and operations involving not-yet-migrated related entities (ArticleTag, ArticleComment, ArticleFavorite) are explicitly marked as `TODO` and deferred.
+---
