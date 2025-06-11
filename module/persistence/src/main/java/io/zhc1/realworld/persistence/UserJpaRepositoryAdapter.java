@@ -3,6 +3,7 @@ package io.zhc1.realworld.persistence;
 import java.util.Optional;
 import java.util.UUID;
 
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -12,9 +13,10 @@ import io.zhc1.realworld.model.PasswordEncoder;
 import io.zhc1.realworld.model.User;
 import io.zhc1.realworld.model.UserRepository;
 
+@Profile("h2")
 @Repository
 @RequiredArgsConstructor
-class UserRepositoryAdapter implements UserRepository {
+class UserJpaRepositoryAdapter implements UserRepository {
     private final UserJpaRepository userJpaRepository;
 
     @Override

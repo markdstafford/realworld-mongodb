@@ -16,8 +16,11 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import org.springframework.data.mongodb.core.mapping.Document;
+
 @Slf4j
 @Entity
+@Document(collection = "users") // Added for MongoDB
 @Getter
 @Table(name = "users")
 @NoArgsConstructor(access = AccessLevel.PROTECTED)

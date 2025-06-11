@@ -322,3 +322,242 @@ class MongoConfiguration {
 - The full test suite (unit tests via `./gradlew clean test`) passes with the default H2 profile active, ensuring this addition (inactive by default) does not affect the current H2 setup.
 - **Phase 1: Setup and dependency management is now complete.** The project is now equipped with the necessary MongoDB dependencies and profile-based configurations for both H2 and MongoDB, with H2 remaining the default and fully functional.
 ---
+
+## 2025-06-11 - Task 2.1: Refactor User persistence
+
+**Related Task:** Phase 2, Task 2.1 (Refactor User persistence)
+
+**Reason for Change:**
+
+To migrate the `User` entity and its associated persistence layer components (repository interface, repository adapter) from JPA/H2 to Spring Data MongoDB. This is the first entity to be migrated. Initial refactoring led to build and test failures due to missing dependencies in the `core` module and conflicting Spring Data repository bean definitions. These issues were subsequently resolved by adding necessary dependencies, refining repository configuration scanning, and excluding default Spring Data auto-configurations.
+
+**Summary of Changes:**
+
+*   **Annotate `User` entity for MongoDB:**
+    *   File: `module/core/src/main/java/io/zhc1/realworld/model/User.java`
+    *   Change: Added `@org.springframework.data.mongodb.core.mapping.Document(collection = "users")` annotation to the `User` class. The existing JPA `@Entity` and `@Table` annotations are retained for H2 compatibility.
+    *   Diff:
+        ```diff
+        --- a/module/core/src/main/java/io/zhc1/realworld/model/User.java
+        +++ b/module/core/src/main/java/io/zhc1/realworld/model/User.java
+        @@ -16,8 +16,11 @@
+         import lombok.NoArgsConstructor;
+         import lombok.extern.slf4j.Slf4j;
+         
+        +import org.springframework.data.mongodb.core.mapping.Document;
+        +
+         @Slf4j
+         @Entity
+        +@Document(collection = "users") // Added for MongoDB
+         @Getter
+         @Table(name = "users")
+         @NoArgsConstructor(access = AccessLevel.PROTECTED)
+        ```
+
+*   **Create `UserMongoRepository` interface:**
+    *   New File: `module/persistence/src/main/java/io/zhc1/realworld/persistence/UserMongoRepository.java`
+    *   Content: Interface extending `org.springframework.data.mongodb.repository.MongoRepository<User, UUID>` with method signatures equivalent to those in `UserJpaRepository` (e.g., `findByEmail`, `findByUsername`, `existsByEmail`, `existsByUsername`, `existsByEmailOrUsername`).
+    *   Code:
+        ```java
+        package io.zhc1.realworld.persistence;
+        
+        import java.util.Optional;
+        import java.util.UUID;
+        
+        import org.springframework.data.mongodb.repository.MongoRepository;
+        
+        import io.zhc1.realworld.model.User;
+        
+        interface UserMongoRepository extends MongoRepository<User, UUID> {
+            Optional<User> findByEmail(String email);
+            Optional<User> findByUsername(String username);
+            boolean existsByEmail(String email);
+            boolean existsByUsername(String username);
+            boolean existsByEmailOrUsername(String email, String username);
+        }
+        ```
+
+*   **Isolate existing JPA Adapter (`UserRepositoryAdapter`):**
+    *   File Renamed: `module/persistence/src/main/java/io/zhc1/realworld/persistence/UserRepositoryAdapter.java` to `UserJpaRepositoryAdapter.java`.
+    *   Class Name Change: The class name within the file was updated from `UserRepositoryAdapter` to `UserJpaRepositoryAdapter`.
+    *   Annotation Added: `@org.springframework.context.annotation.Profile("h2")` was added to the `UserJpaRepositoryAdapter` class to ensure it's only active for the H2 profile.
+    *   Diff (Illustrative - actual change includes class rename):
+        ```diff
+        --- a/module/persistence/src/main/java/io/zhc1/realworld/persistence/UserJpaRepositoryAdapter.java
+        +++ b/module/persistence/src/main/java/io/zhc1/realworld/persistence/UserJpaRepositoryAdapter.java
+        @@ -3,6 +3,7 @@
+         import java.util.Optional;
+         import java.util.UUID;
+         
+        +import org.springframework.context.annotation.Profile;
+         import org.springframework.stereotype.Repository;
+         import org.springframework.transaction.annotation.Transactional;
+         
+        @@ -12,6 +13,7 @@
+         import io.zhc1.realworld.model.User;
+         import io.zhc1.realworld.model.UserRepository;
+         
+        +@Profile("h2")
+         @Repository
+         @RequiredArgsConstructor
+         class UserJpaRepositoryAdapter implements UserRepository { // Class name also changed
+        ```
+
+*   **Create `UserMongoRepositoryAdapter` for MongoDB:**
+    *   New File: `module/persistence/src/main/java/io/zhc1/realworld/persistence/UserMongoRepositoryAdapter.java`
+    *   Content: A new class implementing the `io.zhc1.realworld.model.UserRepository` interface.
+        *   Annotated with `@org.springframework.stereotype.Component("userMongoRepositoryAdapter")` (explicit bean name) and `@org.springframework.context.annotation.Profile("mongodb")`.
+        *   Injects and uses the `UserMongoRepository` for its data access operations.
+        *   Methods mirror those in `UserJpaRepositoryAdapter` but interact with MongoDB.
+    *   Code:
+        ```java
+        package io.zhc1.realworld.persistence;
+        // ... imports ...
+        @Profile("mongodb")
+        @Component("userMongoRepositoryAdapter")
+        @RequiredArgsConstructor
+        class UserMongoRepositoryAdapter implements UserRepository {
+            private final UserMongoRepository userMongoRepository;
+            // ... method implementations ...
+        }
+        ```
+
+*   **Add Unit Tests for `UserMongoRepositoryAdapter`:**
+    *   New File: `module/persistence/src/test/java/io/zhc1/realworld/persistence/UserMongoRepositoryAdapterTest.java`
+    *   Content: Comprehensive JUnit 5 tests using Mockito to mock `UserMongoRepository` and `PasswordEncoder`.
+
+*   **Addressing Build & Test Failures:**
+    *   **Added MongoDB dependency to `module/core`:**
+        *   File: `module/core/build.gradle.kts`
+        *   Change: Added `implementation("org.springframework.boot:spring-boot-starter-data-mongodb")` to allow usage of `@Document` annotation in core entities.
+        *   Diff:
+            ```diff
+            --- a/module/core/build.gradle.kts
+            +++ b/module/core/build.gradle.kts
+            @@ -4,5 +4,6 @@
+             
+             dependencies {
+                 implementation(libs.jakarta.persistence.api)
+            +    implementation("org.springframework.boot:spring-boot-starter-data-mongodb") // Added for MongoDB annotations like @Document
+                 testFixturesImplementation(libs.jakarta.persistence.api)
+             }
+            ```
+
+    *   **Fixed Test Stubbing in `UserMongoRepositoryAdapterTest`:**
+        *   File: `module/persistence/src/test/java/io/zhc1/realworld/persistence/UserMongoRepositoryAdapterTest.java`
+        *   Change: Refined Mockito stubbing, particularly for `userMongoRepository.save()` and conditional `findById()` calls, to avoid `UnnecessaryStubbingException` and ensure tests accurately reflect method logic. Moved general `save()` stubbing into individual tests where it's used.
+        *   Illustrative Diff Snippet:
+            ```diff
+            --- a/module/persistence/src/test/java/io/zhc1/realworld/persistence/UserMongoRepositoryAdapterTest.java
+            +++ b/module/persistence/src/test/java/io/zhc1/realworld/persistence/UserMongoRepositoryAdapterTest.java
+            @@ -232,15 +232,14 @@
+             
+                     @BeforeEach
+                     void updateSetup() {
+            -            // Ensure findById returns the sampleUser for update operations
+            +            // Default stub for findById, can be overridden by specific tests.
+                         when(userMongoRepository.findById(userId)).thenReturn(Optional.of(sampleUser));
+            -            // Default save behavior
+            -            when(userMongoRepository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
+                     }
+             
+                     @Test
+                     @DisplayName("when user exists and all data is valid, should update and return user")
+                     void updateUserDetails_whenUserExistsAndDataIsValid_shouldUpdateAndReturnUser() {
+            +            when(userMongoRepository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
+                         when(passwordEncoder.encode(newPassword)).thenReturn("encodedNewPassword");
+                         // Make passwordEncoder.matches return false so password gets updated
+                         when(passwordEncoder.matches(newPassword, sampleUser.getPassword())).thenReturn(false);
+            ```
+
+    *   **Refined Repository Scanning in Configurations:**
+        *   File: `module/persistence/src/main/java/io/zhc1/realworld/config/JpaConfiguration.java`
+        *   Change: Added `@EnableJpaRepositories` with `includeFilters` to scan only interfaces ending with `JpaRepository`.
+        *   Diff:
+            ```diff
+            --- a/module/persistence/src/main/java/io/zhc1/realworld/config/JpaConfiguration.java
+            +++ b/module/persistence/src/main/java/io/zhc1/realworld/config/JpaConfiguration.java
+            @@ -1,10 +1,17 @@
+             package io.zhc1.realworld.config;
+             
+            +import org.springframework.context.annotation.ComponentScan.Filter;
+             import org.springframework.context.annotation.Configuration;
+            +import org.springframework.context.annotation.FilterType;
+             import org.springframework.context.annotation.Profile;
+             import org.springframework.data.jpa.repository.config.EnableJpaAuditing;
+            +import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
+             
+             @Profile("h2")
+             @Configuration
+             @EnableJpaAuditing
+            +@EnableJpaRepositories(
+            +    basePackages = "io.zhc1.realworld.persistence",
+            +    includeFilters = @Filter(type = FilterType.REGEX, pattern = ".*JpaRepository")
+            +)
+             class JpaConfiguration {}
+            ```
+        *   File: `module/persistence/src/main/java/io/zhc1/realworld/config/MongoConfiguration.java`
+        *   Change: Added `@EnableMongoRepositories` with `includeFilters` to scan only interfaces ending with `MongoRepository`.
+        *   Diff:
+            ```diff
+            --- a/module/persistence/src/main/java/io/zhc1/realworld/config/MongoConfiguration.java
+            +++ b/module/persistence/src/main/java/io/zhc1/realworld/config/MongoConfiguration.java
+            @@ -1,13 +1,20 @@
+             package io.zhc1.realworld.config;
+             
+             import org.springframework.context.annotation.Bean;
+            +import org.springframework.context.annotation.ComponentScan.Filter;
+             import org.springframework.context.annotation.Configuration;
+            +import org.springframework.context.annotation.FilterType;
+             import org.springframework.context.annotation.Profile;
+             import org.springframework.data.mongodb.MongoDatabaseFactory;
+             import org.springframework.data.mongodb.MongoTransactionManager;
+            +import org.springframework.data.mongodb.repository.config.EnableMongoRepositories;
+             
+             @Profile("mongodb")
+             @Configuration
+            +@EnableMongoRepositories(
+            +    basePackages = "io.zhc1.realworld.persistence",
+            +    includeFilters = @Filter(type = FilterType.REGEX, pattern = ".*MongoRepository")
+            +)
+             class MongoConfiguration {
+             
+                 @Bean
+            ```
+
+    *   **Excluded Auto-configuration for Repositories:**
+        *   File: `server/api/src/main/java/io/zhc1/realworld/RealWorldApplication.java`
+        *   Change: Added `exclude = {JpaRepositoriesAutoConfiguration.class, MongoRepositoriesAutoConfiguration.class}` to `@SpringBootApplication` to prevent default repository scanning and rely on explicit configurations.
+        *   Diff:
+            ```diff
+            --- a/server/api/src/main/java/io/zhc1/realworld/RealWorldApplication.java
+            +++ b/server/api/src/main/java/io/zhc1/realworld/RealWorldApplication.java
+            @@ -2,8 +2,13 @@
+             
+             import org.springframework.boot.SpringApplication;
+             import org.springframework.boot.autoconfigure.SpringBootApplication;
+            +import org.springframework.boot.autoconfigure.data.jpa.JpaRepositoriesAutoConfiguration;
+            +import org.springframework.boot.autoconfigure.data.mongo.MongoRepositoriesAutoConfiguration;
+             
+            -@SpringBootApplication
+            +@SpringBootApplication(exclude = {
+            +    JpaRepositoriesAutoConfiguration.class,
+            +    MongoRepositoriesAutoConfiguration.class
+            +})
+             public class RealWorldApplication {
+                 public static void main(String[] args) {
+                     SpringApplication.run(RealWorldApplication.class, args);
+            ```
+
+**Success Criteria:**
+
+- The `User.java` entity in `module/core` is correctly annotated with `@Document(collection = "users")` alongside existing JPA annotations, and `module/core` has the necessary MongoDB dependency.
+- The `UserMongoRepository.java` interface is created in `module/persistence`, extends `MongoRepository<User, UUID>`, and contains all required data access method signatures.
+- The `UserJpaRepositoryAdapter.java` in `module/persistence` is correctly renamed, annotated with `@Profile("h2")`, and implements `UserRepository` using `UserJpaRepository`.
+- The new `UserMongoRepositoryAdapter.java` is created in `module/persistence`, implements `UserRepository`, is annotated with `@Component("userMongoRepositoryAdapter")` and `@Profile("mongodb")`, and correctly uses `UserMongoRepository`.
+- The new `UserMongoRepositoryAdapterTest.java` is created and its tests pass after stubbing corrections.
+- `JpaConfiguration` and `MongoConfiguration` are updated with profile-specific `@EnableJpaRepositories` and `@EnableMongoRepositories` respectively, using filters to prevent bean conflicts.
+- `RealWorldApplication` excludes default JPA and MongoDB repository auto-configurations.
+- The changelog is updated with this entry, including details of the fixes.
+- The full application test suite (`./gradlew clean test`) passes with the default "h2" profile active, confirming no regressions and that the application context loads correctly.
+---
