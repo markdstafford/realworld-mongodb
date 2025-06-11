@@ -12,4 +12,4 @@ spring:
     virtual:
       enabled: true
   profiles:
-    active: h2
+    active: mongodb

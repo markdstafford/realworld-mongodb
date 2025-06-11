@@ -2,13 +2,21 @@ spring:
   data:
     mongodb:
       # MongoDB connection URI.
-      # This is a placeholder and will be configured more robustly in Task 3.1,
-      # potentially using an environment variable like ${MONGO_CONNECTION_URI}.
-      # Example for local development: mongodb://localhost:27017/realworld_db
-      uri: mongodb://localhost:27017/realworld_placeholder
+      uri: mongodb://localhost:27017/realworld
 
       # auto-index-creation can be enabled here if needed for @Indexed annotations
       # (e.g., if using Spring Data MongoDB's @Indexed annotation on domain models)
       # auto-index-creation: true
 
       # Other MongoDB-specific properties can be added below as required during the migration.
+
+  # Exclude JPA and DataSource auto-configurations when 'mongodb' profile is active
+  # to prevent H2/JPA from being initialized.
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
+      - org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration
+      - org.springframework.boot.autoconfigure.jdbc.DataSourceTransactionManagerAutoConfiguration
+      # We might also need to exclude JpaRepositoriesAutoConfiguration here if not done at the app level,
+      # but it was already excluded in RealWorldApplication.java.
+      # - org.springframework.boot.autoconfigure.data.jpa.JpaRepositoriesAutoConfiguration

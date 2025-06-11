@@ -2,6 +2,7 @@ package io.zhc1.realworld.persistence;
 
 import java.util.List;
 
+import org.springframework.context.annotation.Profile; // Added import
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -11,9 +12,10 @@ import io.zhc1.realworld.model.User;
 import io.zhc1.realworld.model.UserFollow;
 import io.zhc1.realworld.model.UserRelationshipRepository;
 
+@Profile("h2") // Added annotation
 @Repository
 @RequiredArgsConstructor
-class UserRelationshipRepositoryAdapter implements UserRelationshipRepository {
+class UserRelationshipJpaRepositoryAdapter implements UserRelationshipRepository { // Changed class name
     private final UserFollowJpaRepository userFollowJpaRepository;
 
     @Override

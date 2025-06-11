@@ -1,5 +1,6 @@
 package io.zhc1.realworld.persistence;
 
+import org.springframework.context.annotation.Profile; // Added import
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -10,9 +11,10 @@ import io.zhc1.realworld.model.ArticleFavorite;
 import io.zhc1.realworld.model.ArticleFavoriteRepository;
 import io.zhc1.realworld.model.User;
 
+@Profile("h2") // Added annotation
 @Repository
 @RequiredArgsConstructor
-class ArticleFavoriteRepositoryAdapter implements ArticleFavoriteRepository {
+class ArticleFavoriteJpaRepositoryAdapter implements ArticleFavoriteRepository { // Changed class name
     private final ArticleFavoriteJpaRepository articleFavoriteJpaRepository;
 
     @Override
