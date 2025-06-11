@@ -17,8 +17,12 @@ import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
+import org.springframework.data.mongodb.core.mapping.DBRef;
+import org.springframework.data.mongodb.core.mapping.Document;
+
 @Getter
 @Entity
+@Document(collection = "user_follows") // Added for MongoDB
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @Table(
         name = "user_follow",
@@ -30,10 +34,12 @@ public class UserFollow {
 
     @ManyToOne
     @JoinColumn(name = "follower_id")
+    @DBRef // Added for MongoDB
     private User follower;
 
     @ManyToOne
     @JoinColumn(name = "following_id")
+    @DBRef // Added for MongoDB
     private User following;
 
     @Column(nullable = false, updatable = false)

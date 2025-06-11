@@ -17,7 +17,11 @@ import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
+import org.springframework.data.mongodb.core.mapping.DBRef;
+import org.springframework.data.mongodb.core.mapping.Document;
+
 @Entity
+@Document(collection = "article_favorites") // Added for MongoDB
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @Table(
@@ -30,10 +34,12 @@ public class ArticleFavorite {
 
     @ManyToOne
     @JoinColumn(name = "user_id")
+    @DBRef // Added for MongoDB
     private User user;
 
     @ManyToOne
     @JoinColumn(name = "article_id")
+    @DBRef // Added for MongoDB
     private Article article;
 
     @Column(nullable = false, updatable = false)
