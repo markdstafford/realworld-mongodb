@@ -11,3 +11,5 @@ spring:
   threads:
     virtual:
       enabled: true
+  profiles:
+    active: h2

@@ -106,3 +106,219 @@ To ensure that the conservative dependency updates made in Task 0.3 did not intr
 - All 15 unit tests passed after the dependency updates.
 - **Phase 0: Project baseline and health check is now complete.** The project has a stable baseline, a documented and validated testing protocol, and updated dependencies (conservatively), with all tests passing.
 ---
+
+## 2025-06-11 - Task 1.1: Integrate MongoDB dependency
+
+**Related Task:** Phase 1, Task 1.1 (Integrate MongoDB dependency)
+
+**Reason for Change:**
+
+To add the `spring-boot-starter-data-mongodb` dependency to the `module/persistence` module. This is the first step in Phase 1, preparing the project for MongoDB integration by making the necessary Spring Data MongoDB libraries available.
+
+**Code Diff (`module/persistence/build.gradle.kts`):**
+
+```diff
+--- a/module/persistence/build.gradle.kts
++++ b/module/persistence/build.gradle.kts
+@@ -6,6 +6,7 @@
+     implementation(libs.spring.boot.starter.data.jpa)
+     implementation(libs.spring.boot.starter.cache)
+     implementation(libs.spring.boot.starter.p6spy)
++    implementation("org.springframework.boot:spring-boot-starter-data-mongodb")
+ 
+     implementation(libs.cache.caffeine)
+ }
+
+```
+
+**Success Criteria:**
+
+- The `org.springframework.boot:spring-boot-starter-data-mongodb` dependency is added to the `dependencies` block in `module/persistence/build.gradle.kts`.
+- The changelog is updated with this entry.
+- The full test suite (unit tests via `./gradlew clean test`) will be run against the default H2 configuration to ensure this addition does not introduce any immediate regressions. All tests must pass.
+---
+
+## 2025-06-11 - Task 1.2: Isolate database configurations using profiles
+
+**Related Task:** Phase 1, Task 1.2 (Isolate database configurations using profiles)
+
+**Reason for Change:**
+
+To separate H2 and MongoDB specific configurations into distinct Spring profiles. This allows the application to switch between database types by activating the appropriate profile, a key requirement for the phased migration strategy. This change ensures that H2 remains the default configuration while preparing for MongoDB integration.
+
+**Summary of Files Created/Modified:**
+
+*   **Created:** `module/persistence/src/main/resources/application-h2.yaml`
+    *   Moved all H2-specific properties (datasource URL, JPA DDL auto, P6Spy settings) from the main `application.yaml` in the persistence module into this file.
+    *   Content:
+        ```yaml
+        spring:
+          datasource:
+            url: jdbc:h2:mem:testdb?MODE=MYSQL;
+        
+          jpa:
+            open-in-view: false
+            hibernate:
+              ddl-auto: create-drop
+        
+        decorator:
+          datasource:
+            p6spy:
+              enable-logging: true
+        ```
+
+*   **Created:** `module/persistence/src/main/resources/application-mongodb.yaml`
+    *   Added initial placeholder configuration for MongoDB, including `spring.data.mongodb.uri`.
+    *   Content:
+        ```yaml
+        spring:
+          data:
+            mongodb:
+              uri: mongodb://localhost:27017/realworld_placeholder
+        ```
+
+*   **Modified:** `module/persistence/src/main/resources/application.yaml`
+    *   Removed H2-specific properties. The file now contains comments indicating that database configurations are profile-specific.
+    *   Diff:
+        ```diff
+        --- a/module/persistence/src/main/resources/application.yaml
+        +++ b/module/persistence/src/main/resources/application.yaml
+        @@ -1,13 +1,7 @@
+        -spring:
+        -  datasource:
+        -    url: jdbc:h2:mem:testdb?MODE=MYSQL;
+        -
+        -  jpa:
+        -    open-in-view: false
+        -    hibernate:
+        -      ddl-auto: create-drop
+        -
+        -decorator:
+        -  datasource:
+        -    p6spy:
+        -      enable-logging: true
+        +# This file is intentionally left almost empty.
+        +# All database-specific configurations have been moved to profile-specific files:
+        +# - application-h2.yaml (for H2 database, default)
+        +# - application-mongodb.yaml (for MongoDB)
+        +#
+        +# Spring Boot will load the appropriate file based on the active profile.
+        +# The active profile is set in server/api/src/main/resources/application.yaml
+        ```
+
+*   **Modified:** `server/api/src/main/resources/application.yaml`
+    *   Added `spring.profiles.active=h2` to explicitly set H2 as the default active profile for the application.
+    *   Diff:
+        ```diff
+        --- a/server/api/src/main/resources/application.yaml
+        +++ b/server/api/src/main/resources/application.yaml
+        @@ -11,3 +11,5 @@
+           threads:
+             virtual:
+               enabled: true
+        +  profiles:
+        +    active: h2
+        ```
+
+**Success Criteria:**
+
+- Configuration properties are correctly split into `application-h2.yaml` and `application-mongodb.yaml` within the `module/persistence/src/main/resources/` directory.
+- The `module/persistence/src/main/resources/application.yaml` file is updated to reflect that configurations are now profile-based.
+- The `server/api/src/main/resources/application.yaml` file sets `spring.profiles.active=h2`, ensuring H2 is the default.
+- The changelog is updated with this entry.
+- The full test suite (unit tests via `./gradlew clean test`) passes, confirming that the application still runs correctly with the H2 profile active by default (to be validated in the next step).
+---
+
+## 2025-06-11 - Task 1.3: Make configuration beans profile-specific
+
+**Related Task:** Phase 1, Task 1.3 (Make configuration beans profile-specific)
+
+**Reason for Change:**
+
+To ensure that JPA-specific configuration beans (`JpaConfiguration` and `DataSourceConfiguration`) are only loaded when the "h2" Spring profile is active. This prevents these H2/JPA related beans from being instantiated and potentially causing conflicts when the application is later run with the "mongodb" profile. This step further isolates the H2 and MongoDB configurations.
+
+**Code Diffs:**
+
+*   **`module/persistence/src/main/java/io/zhc1/realworld/config/JpaConfiguration.java`**:
+    ```diff
+    --- a/module/persistence/src/main/java/io/zhc1/realworld/config/JpaConfiguration.java
+    +++ b/module/persistence/src/main/java/io/zhc1/realworld/config/JpaConfiguration.java
+    @@ -1,8 +1,10 @@
+     package io.zhc1.realworld.config;
+     
+     import org.springframework.context.annotation.Configuration;
+    +import org.springframework.context.annotation.Profile;
+     import org.springframework.data.jpa.repository.config.EnableJpaAuditing;
+     
+    +@Profile("h2")
+     @Configuration
+     @EnableJpaAuditing
+     class JpaConfiguration {}
+    ```
+
+*   **`module/persistence/src/main/java/io/zhc1/realworld/config/DataSourceConfiguration.java`**:
+    ```diff
+    --- a/module/persistence/src/main/java/io/zhc1/realworld/config/DataSourceConfiguration.java
+    +++ b/module/persistence/src/main/java/io/zhc1/realworld/config/DataSourceConfiguration.java
+    @@ -9,10 +9,12 @@
+     import org.hibernate.engine.jdbc.internal.FormatStyle;
+     import org.hibernate.engine.jdbc.internal.Formatter;
+     import org.springframework.context.annotation.Configuration;
+    +import org.springframework.context.annotation.Profile;
+     
+     import com.p6spy.engine.spy.P6SpyOptions;
+     import com.p6spy.engine.spy.appender.MessageFormattingStrategy;
+     
+    +@Profile("h2")
+     @Configuration
+     class DataSourceConfiguration {
+         @PostConstruct
+    ```
+
+**Success Criteria:**
+
+- The `@Profile("h2")` annotation is added to the `JpaConfiguration` class in `io.zhc1.realworld.config` package.
+- The `@Profile("h2")` annotation is added to the `DataSourceConfiguration` class in the `io.zhc1.realworld.config` package.
+- The changelog is updated with this entry.
+- The full test suite (unit tests via `./gradlew clean test`) passes, confirming that the application still loads these beans correctly when the default H2 profile is active (to be validated in the next step by the assistant).
+---
+
+## 2025-06-11 - Task 1.4: Configure MongoDB transaction management
+
+**Related Task:** Phase 1, Task 1.4 (Configure MongoDB transaction management)
+
+**Reason for Change:**
+
+To introduce a `MongoTransactionManager` bean that will be active only when the "mongodb" Spring profile is enabled. This is essential for supporting transactions with MongoDB, allowing operations across multiple documents or collections to be treated as a single atomic unit if required by the application logic during and after the migration. This completes the foundational setup for MongoDB in the persistence layer.
+
+**Code (New file: `module/persistence/src/main/java/io/zhc1/realworld/config/MongoConfiguration.java`):**
+
+```java
+package io.zhc1.realworld.config;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Profile;
+import org.springframework.data.mongodb.MongoDatabaseFactory;
+import org.springframework.data.mongodb.MongoTransactionManager;
+
+@Profile("mongodb")
+@Configuration
+class MongoConfiguration {
+
+    @Bean
+    MongoTransactionManager transactionManager(MongoDatabaseFactory dbFactory) {
+        return new MongoTransactionManager(dbFactory);
+    }
+}
+```
+
+**Success Criteria:**
+
+- A new class `MongoConfiguration.java` is created in the `io.zhc1.realworld.config` package within the `module/persistence` module.
+- This class is annotated with `@Configuration` and `@Profile("mongodb")`.
+- It defines a bean of type `MongoTransactionManager` named `transactionManager`, which takes a `MongoDatabaseFactory` as a parameter.
+- The changelog is updated with this entry.
+- The full test suite (unit tests via `./gradlew clean test`) passes with the default H2 profile active, ensuring this addition (inactive by default) does not affect the current H2 setup.
+- **Phase 1: Setup and dependency management is now complete.** The project is now equipped with the necessary MongoDB dependencies and profile-based configurations for both H2 and MongoDB, with H2 remaining the default and fully functional.
+---

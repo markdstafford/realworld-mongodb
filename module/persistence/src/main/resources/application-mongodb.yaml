@@ -1,0 +1,14 @@
+spring:
+  data:
+    mongodb:
+      # MongoDB connection URI.
+      # This is a placeholder and will be configured more robustly in Task 3.1,
+      # potentially using an environment variable like ${MONGO_CONNECTION_URI}.
+      # Example for local development: mongodb://localhost:27017/realworld_db
+      uri: mongodb://localhost:27017/realworld_placeholder
+
+      # auto-index-creation can be enabled here if needed for @Indexed annotations
+      # (e.g., if using Spring Data MongoDB's @Indexed annotation on domain models)
+      # auto-index-creation: true
+
+      # Other MongoDB-specific properties can be added below as required during the migration.

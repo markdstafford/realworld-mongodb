@@ -1,13 +1,7 @@
-spring:
-  datasource:
-    url: jdbc:h2:mem:testdb?MODE=MYSQL;
-
-  jpa:
-    open-in-view: false
-    hibernate:
-      ddl-auto: create-drop
-
-decorator:
-  datasource:
-    p6spy:
-      enable-logging: true
+# This file is intentionally left almost empty.
+# All database-specific configurations have been moved to profile-specific files:
+# - application-h2.yaml (for H2 database, default)
+# - application-mongodb.yaml (for MongoDB)
+#
+# Spring Boot will load the appropriate file based on the active profile.
+# The active profile is set in server/api/src/main/resources/application.yaml

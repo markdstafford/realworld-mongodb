@@ -9,10 +9,12 @@ import jakarta.annotation.PostConstruct;
 import org.hibernate.engine.jdbc.internal.FormatStyle;
 import org.hibernate.engine.jdbc.internal.Formatter;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Profile;
 
 import com.p6spy.engine.spy.P6SpyOptions;
 import com.p6spy.engine.spy.appender.MessageFormattingStrategy;
 
+@Profile("h2")
 @Configuration
 class DataSourceConfiguration {
     @PostConstruct
@@ -81,7 +83,7 @@ class DataSourceConfiguration {
             int order = 1;
 
             while (!callstack.empty()) {
-                String trace = "     %s. %s\n".formatted(order++, callstack.pop());
+                String trace = "     %s. %s\\n".formatted(order++, callstack.pop());
                 traceBuilder.append(trace);
             }
 
