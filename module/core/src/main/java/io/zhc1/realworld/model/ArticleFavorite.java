@@ -43,7 +43,7 @@ public class ArticleFavorite {
     private Article article;
 
     @Column(nullable = false, updatable = false)
-    private final LocalDateTime createdAt = LocalDateTime.now();
+    private LocalDateTime createdAt;
 
     public ArticleFavorite(User user, Article article) {
         if (user == null || user.getId() == null) {
@@ -55,6 +55,7 @@ public class ArticleFavorite {
 
         this.user = user;
         this.article = article;
+        this.createdAt = LocalDateTime.now();
     }
 
     @Override

@@ -1,6 +1,8 @@
 logging:
   level:
     com.zaxxer.hikari.HikariConfig: DEBUG
+    org.springframework.data.mongodb.core.MongoTemplate: DEBUG
+    org.mongodb.driver.protocol.command: DEBUG
 
 security:
   key:
@@ -13,3 +15,6 @@ spring:
       enabled: true
   profiles:
     active: mongodb
+  endpoint:
+    health:
+      show-details: always

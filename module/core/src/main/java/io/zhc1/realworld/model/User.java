@@ -45,10 +45,13 @@ public class User {
     private String imageUrl;
 
     @Column(nullable = false, updatable = false)
-    private final LocalDateTime createdAt = LocalDateTime.now();
+    private LocalDateTime createdAt;
 
     public User(UserRegistry registry) {
         this(registry.email(), registry.username(), registry.password());
+        // Generate UUID for MongoDB
+        this.id = UUID.randomUUID();
+        this.createdAt = LocalDateTime.now();  // Set createdAt in constructor
     }
 
     public User(String email, String username, String password) {
@@ -65,6 +68,15 @@ public class User {
         this.email = email;
         this.username = username;
         this.password = password;
+
+        // Generate UUID for MongoDB
+        this.id = UUID.randomUUID();
+        this.createdAt = LocalDateTime.now();  // Set createdAt in constructor
+    }
+
+    // Add a setter for createdAt to allow MongoDB to set it during deserialization
+    public void setCreatedAt(LocalDateTime createdAt) {
+       this.createdAt = createdAt;
     }
 
     public boolean equalsEmail(String email) {

@@ -22,11 +22,12 @@ import org.springframework.data.mongodb.core.mapping.Document;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Tag {
     @Id
+    @org.springframework.data.annotation.Id
     @Column(length = 20)
     private String name;
 
     @Column(nullable = false, updatable = false)
-    private final LocalDateTime createdAt = LocalDateTime.now();
+    private LocalDateTime createdAt;
 
     public Tag(String name) {
         if (name == null || name.isBlank()) {
@@ -34,6 +35,7 @@ public class Tag {
         }
 
         this.name = name;
+        this.createdAt = LocalDateTime.now();
     }
 
     @Override

@@ -9,6 +9,7 @@ import java.util.Set;
 import org.springframework.stereotype.Service;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 import io.zhc1.realworld.model.Article;
 import io.zhc1.realworld.model.ArticleDetails;
@@ -23,6 +24,7 @@ import io.zhc1.realworld.model.UserRelationshipRepository;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class ArticleService {
     private final UserRelationshipRepository userRelationshipRepository;
     private final ArticleRepository articleRepository;
@@ -88,10 +90,12 @@ public class ArticleService {
      * @return Returns the written article
      */
     public Article write(Article article, Collection<Tag> tags) {
+        log.info("Checking if article title already exists: '{}'", article.getTitle());
         if (articleRepository.existsBy(article.getTitle())) {
+            log.error("Article title '{}' already exists. Aborting.", article.getTitle());
             throw new IllegalArgumentException("title is already exists.");
         }
-
+        log.info("Article title '{}' is unique. Proceeding to save.", article.getTitle());
         return articleRepository.save(article, Objects.requireNonNullElseGet(tags, Set::of));
     }
 

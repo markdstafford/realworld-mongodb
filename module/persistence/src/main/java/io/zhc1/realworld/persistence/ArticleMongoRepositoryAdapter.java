@@ -17,6 +17,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 import io.zhc1.realworld.model.Article;
 import io.zhc1.realworld.model.ArticleDetails;
@@ -31,6 +32,7 @@ import io.zhc1.realworld.model.UserRepository;
 @Profile("mongodb")
 @Component("articleMongoRepositoryAdapter")
 @RequiredArgsConstructor
+@Slf4j
 class ArticleMongoRepositoryAdapter implements ArticleRepository {
 
     private final ArticleMongoRepository articleMongoRepository;
@@ -174,6 +176,9 @@ class ArticleMongoRepositoryAdapter implements ArticleRepository {
 
     @Override
     public boolean existsBy(String title) {
-        return articleMongoRepository.existsByTitle(title);
+        log.info("Executing existsBy check in repository for title: '{}'", title);
+        boolean exists = mongoTemplate.exists(new Query(Criteria.where("title").is(title)), Article.class);
+        log.info("Repository check for title '{}' returned: {}", title, exists);
+        return exists;
     }
 }

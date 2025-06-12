@@ -43,7 +43,7 @@ public class UserFollow {
     private User following;
 
     @Column(nullable = false, updatable = false)
-    private final LocalDateTime createdAt = LocalDateTime.now();
+    private LocalDateTime createdAt;
 
     public UserFollow(User follower, User following) {
         if (follower == null || follower.getId() == null) {
@@ -55,6 +55,7 @@ public class UserFollow {
 
         this.follower = follower;
         this.following = following;
+        this.createdAt = LocalDateTime.now();
     }
 
     @Override

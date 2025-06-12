@@ -47,7 +47,7 @@ public class ArticleTag {
     private Tag tag;
 
     @Column(nullable = false, updatable = false)
-    private final LocalDateTime createdAt = LocalDateTime.now();
+    private LocalDateTime createdAt;
 
     public ArticleTag(Article article, Tag tag) {
         if (article == null || article.getId() == null) {
@@ -59,6 +59,7 @@ public class ArticleTag {
 
         this.article = article;
         this.tag = tag;
+        this.createdAt = LocalDateTime.now();
     }
 
     @Override

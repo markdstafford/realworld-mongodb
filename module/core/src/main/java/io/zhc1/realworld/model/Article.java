@@ -53,10 +53,10 @@ public class Article {
 
     @OneToMany(mappedBy = "article", cascade = CascadeType.ALL, fetch = FetchType.EAGER)
     @DBRef // Added for MongoDB, implies ArticleTag will be a separate document collection
-    private final Set<ArticleTag> articleTags = new HashSet<>();
+    private Set<ArticleTag> articleTags = new HashSet<>();
 
     @Column(nullable = false, updatable = false)
-    private final LocalDateTime createdAt = LocalDateTime.now();
+    private LocalDateTime createdAt;
 
     private LocalDateTime updatedAt = LocalDateTime.now();
 
@@ -83,6 +83,7 @@ public class Article {
         this.title = title;
         this.description = description;
         this.content = content;
+        this.createdAt = LocalDateTime.now();
     }
 
     public boolean isNotAuthor(User author) {
@@ -120,6 +121,10 @@ public class Article {
     public void addTag(ArticleTag tag) {
         articleTags.add(tag);
         tag.setArticle(this);
+    }
+
+    public void setArticleTags(Set<ArticleTag> articleTags) {
+        this.articleTags = articleTags;
     }
 
     @Override
